@@ -1,0 +1,10 @@
+{
+  "name": "mirror",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@mirror-protocol/mirror.js": "^2.1.4",
+    "@terra-money/terra.js": "2.0.16"
+  }
+}
