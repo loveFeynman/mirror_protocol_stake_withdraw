@@ -15,6 +15,8 @@ const {
   DEFAULT_MIRROR_OPTIONS,
 } = require("@mirror-protocol/mirror.js");
 
+const base64 = require('base-64');
+
 const MICRO = 1_000_000;
 
 const testnet_config = {
@@ -47,10 +49,10 @@ const mnemonic = new MnemonicKey({ mnemonic: config.mnemonicKey });
 let options = config.options; // omit it for testnet
 options.key = new MnemonicKey({ mnemonic: config.mnemonicKey });
 const mirror = new Mirror(options);
+const wallet = lcd.wallet(mnemonic);
 
 const autoStake = async (qty) => {
   const { mAAPL } = mirror.assets;
-  const wallet = lcd.wallet(mnemonic);
 
   /*------------------ calculate pool price ---------------------------------*/
   console.log("STEP1: calcuate pool price... ");
@@ -156,4 +158,70 @@ const autoStake = async (qty) => {
   console.log("*****SUCCESS*****");
 };
 
-autoStake(1);
+const withdraw = async (qty)  => {
+  const { mAAPL } = mirror.assets;
+  /*------------------ unbonding ---------------------------------*/
+
+  console.log("STEP1: unbond... ");
+  const unbond_contract = new MsgExecuteContract(
+    wallet.key.accAddress,
+    config.stakingAddress,
+    {
+      unbond: {
+        amount: new Int(new Dec(qty).mul(MICRO)).toString(),
+        asset_token: mAAPL.token.contractAddress,
+      },
+    }
+  );
+
+  // Sign transaction
+  const tx1 = await wallet.createAndSignTx({
+    msgs: [unbond_contract],
+    memo: "deposited into maui pool",
+    gasPrices: { uusd: 0.15 },
+  });
+
+  // Broadcast transaction and check result
+  await lcd.tx.broadcast(tx1).then((txResult) => {
+    if (isTxError(txResult)) {
+      throw new Error(
+        `encountered an error while running the transaction: ${txResult}`
+      );
+    }
+  });
+  console.log("*****SUCCESS*****");
+
+  /*------------------ sending ---------------------------------*/
+
+  const sending_contract = new MsgExecuteContract(
+    wallet.key.accAddress,
+    mAAPL.lpToken.contractAddress,
+    {
+    send: {
+      amount: new Int(new Dec(qty).mul(MICRO)).toString(),
+      contract: mAAPL.pair.contractAddress,
+      msg: base64.encode( '{"withdraw_liquidity":{}}' ) //"eyJ3aXRoZHJhd19saXF1aWRpdHkiOnt9fQ=="
+    }
+  }
+  );
+
+  // Sign transaction
+  const tx2 = await wallet.createAndSignTx({
+    msgs: [sending_contract],
+    memo: "deposited into maui pool",
+    gasPrices: { uusd: 0.15 },
+  });
+
+  // Broadcast transaction and check result
+  await lcd.tx.broadcast(tx2).then((txResult) => {
+    if (isTxError(txResult)) {
+      throw new Error(
+        `encountered an error while running the transaction: ${txResult}`
+      );
+    }
+  });
+  console.log("*****SUCCESS*****");
+}
+
+// autoStake(1);
+withdraw(1);
