@@ -17,10 +17,7 @@ const {
 const base64 = require('base-64');
 const MICRO = 1_000_000;
 
-const autoStake = async (mnemonicKeyStr, network, qty, mAssetType, slippageTolerance) => {
-  /*----------------- setting ------------------------------------------------*/
-  const mnemonic = new MnemonicKey({ mnemonic: mnemonicKeyStr });
-
+const configSetting = (mnemonicKeyStr, network, mAssetType, mode) => {
   if (network === "testnet")
   {
     config = TESTNET_OPTIONS;
@@ -47,8 +44,19 @@ const autoStake = async (mnemonicKeyStr, network, qty, mAssetType, slippageToler
     return;
   }
 
-  const wallet = lcd.wallet(mnemonic);
-  
+  if (mode === "execute"){
+    const mnemonic = new MnemonicKey({ mnemonic: mnemonicKeyStr });
+    const wallet = lcd.wallet(mnemonic);
+    return {config, lcd, mAsset, wallet};
+  }
+  else
+    return {config, lcd, mAsset}
+}
+
+const autoStake = async (mnemonicKeyStr, network, qty, mAssetType, slippageTolerance) => {
+  /*----------------- setting ------------------------------------------------*/
+  const { config, lcd, mAsset, wallet } = configSetting(mnemonicKeyStr, network, mAssetType, "execute");
+
   /*------------------ calculate pool price ---------------------------------*/
   console.log("STEP1: calcuate pool price... ");
 
@@ -156,37 +164,12 @@ const autoStake = async (mnemonicKeyStr, network, qty, mAssetType, slippageToler
   console.log("*****SUCCESS*****");
 };
 
+
+
 const withdraw = async (mnemonicKeyStr, network, qty, mAssetType)  => {
   /*----------------- setting ------------------------------------------------*/
-  const mnemonic = new MnemonicKey({ mnemonic: mnemonicKeyStr });
+  const { config, lcd, mAsset, wallet } = configSetting(mnemonicKeyStr, network, mAssetType, "execute");
 
-  if (network === "testnet")
-  {
-    config = TESTNET_OPTIONS;
-  } else if (network === "mainnet"){
-    config = MAINNET_OPTIONS;
-  }
-  else 
-  {
-    console.log("ERROR: network must be 'testnet' or 'mainnet'");
-    return;
-  }
-
-  const lcd = new LCDClient({
-    URL: config.URL,
-    chainID: config.chainID,
-  });
-  
-  const mAsset = config.assets.find((value) => {
-    return (value.symbol === mAssetType )
-  });
-
-  if (mAsset === 'undefined') {
-    console.log("ERROR: incorrect mAsset name")
-    return;
-  }
-
-  const wallet = lcd.wallet(mnemonic);
 
   /*------------------ unbonding ---------------------------------*/
 
@@ -220,7 +203,7 @@ const withdraw = async (mnemonicKeyStr, network, qty, mAssetType)  => {
   console.log("*****SUCCESS*****");
 
   /*------------------ sending ---------------------------------*/
-  console.log("STEP1: sending... ");
+  console.log("STEP2: sending... ");
 
   const sending_contract = new MsgExecuteContract(
     wallet.key.accAddress,
@@ -253,5 +236,23 @@ const withdraw = async (mnemonicKeyStr, network, qty, mAssetType)  => {
 
 }
 
-autoStake("question solar spread moral novel rival diet turtle royal tree armor ozone dish enough electric job slogan snow occur spray volcano aisle strong fiction", "testnet", 1, "mAAPL", 1);
-// withdraw("question solar spread moral novel rival diet turtle royal tree armor ozone dish enough electric job slogan snow occur spray volcano aisle strong fiction", "testnet", 1000, "mAAPL");
+const queryPool = async (network, mAssetType, accAddress) => {
+  /*----------------- setting ------------------------------------------------*/
+  const { config, lcd, mAsset } = configSetting("", network, mAssetType, "query");
+  const rewardInfo = await lcd.wasm.contractQuery(
+    config.staking,
+    {
+      reward_info: {
+        asset_token: mAsset.token,
+        staker_addr: accAddress
+      }
+    }
+  );
+
+  console.log("bonded amount: ", new Dec(rewardInfo.reward_infos[0].bond_amount).div(MICRO))
+
+}
+
+queryPool("testnet", "mAAPL", "terra1jtzse4nezpkg2k86nkxrwxchaykpxs827ymswn")
+// autoStake("question solar spread moral novel rival diet turtle royal tree armor ozone dish enough electric job slogan snow occur spray volcano aisle strong fiction", "testnet", 0.1, "mAAPL", 1);
+// withdraw("question solar spread moral novel rival diet turtle royal tree armor ozone dish enough electric job slogan snow occur spray volcano aisle strong fiction", "testnet", 1, "mAAPL");
